@@ -31,7 +31,7 @@ Deploy:
 wrangler deploy
 ```
 
-After deployment, configure Telegram's webhook to `https://<worker-subdomain>.workers.dev/telegram`, passing the same `TELEGRAM_WEBHOOK_SECRET` as Telegram's `secret_token`.
+After deployment, configure Telegram's webhook to `https://aicryptobottg-echo.sorashithegod.workers.dev/telegram`, passing the same `TELEGRAM_WEBHOOK_SECRET` as Telegram's `secret_token`. The helper `scripts/set-webhook.sh` calls Telegram's `setWebhook` API; export `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, and `WORKER_URL` before running it with `bash scripts/set-webhook.sh`.
 
 Health check: `GET /health`.
 
