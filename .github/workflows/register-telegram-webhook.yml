@@ -51,10 +51,3 @@ jobs:
           echo "Telegram kept rate-limiting setWebhook after 8 attempts."
           exit 1
 
-          if ! echo "$response" | jq -e '.ok == true' >/dev/null; then
-            echo "Telegram rejected webhook registration:"
-            echo "$response" | jq -c '{ok, description}'
-            exit 1
-          fi
-
-          echo "Telegram webhook registered successfully."
