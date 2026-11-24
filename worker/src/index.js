@@ -65,7 +65,7 @@ export default {
 
     try {
       const command = typeof message.text === "string"
-        ? message.text.trim().split(/\\s+/, 1)[0].split("@", 1)[0]
+        ? message.text.trim().split(/[ \t\r\n]/, 1)[0].split("@", 1)[0]
         : "";
 
       if (command === "/start") {
