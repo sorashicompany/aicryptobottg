@@ -31,7 +31,7 @@ export default {
     const url = new URL(request.url);
 
     if (request.method === "GET" && url.pathname === "/health") {
-      return json({ status: "ok", service: "telegram-echo-bot" });
+      return json({ status: "ok" });
     }
 
     if (request.method !== "POST" || url.pathname !== "/telegram") {
@@ -58,13 +58,17 @@ export default {
     const chatId = message?.chat?.id;
     const messageId = message?.message_id;
 
-    // Updates without a regular message (for example, callback queries) are ignored.
+    // Ignore updates that do not contain a regular chat message.
     if (!Number.isSafeInteger(chatId) || !Number.isSafeInteger(messageId)) {
       return json({ ok: true, ignored: true });
     }
 
     try {
-      if (message.text === "/start" || message.text?.startsWith("/start ")) {
+      const command = typeof message.text === "string"
+        ? message.text.trim().split(/\\s+/, 1)[0].split("@", 1)[0]
+        : "";
+
+      if (command === "/start") {
         await telegram(env.TELEGRAM_BOT_TOKEN, "sendMessage", {
           chat_id: chatId,
           text: "Привет! Отправь мне сообщение, фото, стикер или файл — я повторю его.",
@@ -76,9 +80,10 @@ export default {
           message_id: messageId,
         });
       }
+
       return json({ ok: true });
     } catch {
-      // Non-2xx tells Telegram to retry the update instead of silently losing it.
+      // Telegram retries webhook updates when the Worker returns a non-2xx response.
       return json({ error: "message_copy_failed" }, 502);
     }
   },
