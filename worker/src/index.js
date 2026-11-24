@@ -25,19 +25,5 @@ export default {
     });
     if (!telegramResponse.ok) return json({ error: "telegram_send_failed" }, 502);
     return json({ ok: true });
-  },
-  async scheduled(controller, env) {
-    if (await env.SETUP_STATE.get("webhook_setup") === "ok") return;
-    try {
-      const response = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/setWebhook`, {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ url: "https://aicryptobottg-echo.sorashithegod.workers.dev/telegram", secret_token: env.TELEGRAM_WEBHOOK_SECRET, allowed_updates: ["message"], drop_pending_updates: true })
-      });
-      const result = await response.json();
-      await env.SETUP_STATE.put("webhook_setup_result", JSON.stringify({ ok: response.ok && result.ok === true, description: result.description || "Webhook registration attempted", error_code: result.error_code || null }));
-      if (response.ok && result.ok) await env.SETUP_STATE.put("webhook_setup", "ok");
-    } catch {
-      await env.SETUP_STATE.put("webhook_setup_result", JSON.stringify({ ok: false, description: "Registration request failed" }));
-    }
   }
 };
