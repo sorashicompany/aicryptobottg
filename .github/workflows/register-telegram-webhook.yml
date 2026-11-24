@@ -22,11 +22,34 @@ jobs:
             exit 1
           fi
 
-          response="$(curl --fail --silent --show-error \
-            --request POST \
-            --data-urlencode "url=${WORKER_URL%/}/telegram" \
-            --data-urlencode "secret_token=${TELEGRAM_WEBHOOK_SECRET}" \
-            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook")"
+          # Telegram may temporarily rate-limit setWebhook. Respect retry_after.
+          for attempt in {1..8}; do
+            http_code="$(curl --silent --show-error --output response.json --write-out '%{http_code}' \
+              --request POST \
+              --data-urlencode "url=${WORKER_URL%/}/telegram" \
+              --data-urlencode "secret_token=${TELEGRAM_WEBHOOK_SECRET}" \
+              "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook")"
+
+            response="$(cat response.json)"
+            if [[ "$http_code" == "200" ]] && echo "$response" | jq -e '.ok == true' >/dev/null; then
+              echo "Telegram webhook registered successfully."
+              exit 0
+            fi
+
+            if [[ "$http_code" == "429" ]]; then
+              retry_after="$(echo "$response" | jq -r '.parameters.retry_after // 10')"
+              echo "Telegram rate limited the request; retrying after ${retry_after}s (attempt ${attempt}/8)."
+              sleep "$retry_after"
+              continue
+            fi
+
+            echo "Telegram webhook registration failed (HTTP ${http_code}):"
+            echo "$response" | jq -c '{ok, description}'
+            exit 1
+          done
+
+          echo "Telegram kept rate-limiting setWebhook after 8 attempts."
+          exit 1
 
           if ! echo "$response" | jq -e '.ok == true' >/dev/null; then
             echo "Telegram rejected webhook registration:"
