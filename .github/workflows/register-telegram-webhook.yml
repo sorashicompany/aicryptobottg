@@ -1,0 +1,44 @@
+name: Register Telegram webhook
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  register-webhook:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Worker health
+        env:
+          WORKER_URL: ${{ vars.WORKER_URL || 'https://aicryptobottg-echo.sorashithegod.workers.dev' }}
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error "${WORKER_URL%/}/health"
+
+      - name: Register Telegram webhook
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_WEBHOOK_SECRET: ${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
+          WORKER_URL: ${{ vars.WORKER_URL || 'https://aicryptobottg-echo.sorashithegod.workers.dev' }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${TELEGRAM_BOT_TOKEN}" || -z "${TELEGRAM_WEBHOOK_SECRET}" ]]; then
+            echo "Missing TELEGRAM_BOT_TOKEN or TELEGRAM_WEBHOOK_SECRET in GitHub Actions secrets."
+            exit 1
+          fi
+
+          response="$(curl --fail --silent --show-error \
+            --request POST \
+            --data-urlencode "url=${WORKER_URL%/}/telegram" \
+            --data-urlencode "secret_token=${TELEGRAM_WEBHOOK_SECRET}" \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook")"
+
+          if ! echo "$response" | jq -e '.ok == true' >/dev/null; then
+            echo "Telegram rejected webhook registration:"
+            echo "$response" | jq -c '{ok, description}'
+            exit 1
+          fi
+
+          echo "Telegram webhook registered successfully."
