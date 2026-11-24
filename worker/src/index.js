@@ -1,84 +1,14 @@
 const API = "https://api.telegram.org";
 
-function json(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { "content-type": "application/json; charset=utf-8" },
-  });
-}
-
-function validSecret(received, expected) {
-  if (typeof received !== "string" || typeof expected !== "string") return false;
-  if (received.length !== expected.length) return false;
-  let diff = 0;
-  for (let i = 0; i < received.length; i++) {
-    diff |= received.charCodeAt(i) ^ expected.charCodeAt(i);
-  }
-  return diff === 0;
-}
-
-async function callTelegram(env, method, payload) {
+async function telegram(env, method, data) {
   const response = await fetch(`${API}/bot${env.TELEGRAM_BOT_TOKEN}/${method}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(data),
   });
-
-  const data = await response.json().catch(() => null);
-  if (!response.ok || !data?.ok) {
-    console.error("Telegram API error", method, response.status, data?.description);
-    throw new Error(data?.description || `Telegram API HTTP ${response.status}`);
-  }
-  return data.result;
-}
-
-async function handleWebhook(request, env) {
-  if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_WEBHOOK_SECRET) {
-    return json({ ok: false, error: "missing_worker_secrets" }, 503);
-  }
-
-  const receivedSecret = request.headers.get("X-Telegram-Bot-Api-Secret-Token");
-  if (!validSecret(receivedSecret, env.TELEGRAM_WEBHOOK_SECRET)) {
-    return json({ ok: false, error: "unauthorized" }, 401);
-  }
-
-  let update;
-  try {
-    update = await request.json();
-  } catch {
-    return json({ ok: false, error: "invalid_json" }, 400);
-  }
-
-  const message = update?.message;
-  const chatId = message?.chat?.id;
-  const messageId = message?.message_id;
-
-  if (chatId == null || messageId == null) {
-    return json({ ok: true, ignored: true });
-  }
-
-  const text = typeof message.text === "string" ? message.text : "";
-  const command = text.trim().split(/\s+/, 1)[0].split("@", 1)[0];
-
-  try {
-    if (command === "/start") {
-      await callTelegram(env, "sendMessage", {
-        chat_id: chatId,
-        text: "Привет! Я эхо-бот. Отправь мне сообщение — я повторю его.",
-      });
-    } else {
-      await callTelegram(env, "copyMessage", {
-        chat_id: chatId,
-        from_chat_id: chatId,
-        message_id: messageId,
-      });
-    }
-    return json({ ok: true });
-  } catch (error) {
-    console.error("Webhook processing failed:", error.message);
-    // A non-2xx response lets Telegram retry delivery.
-    return json({ ok: false, error: "telegram_request_failed" }, 502);
-  }
+  const result = await response.json();
+  if (!response.ok || !result.ok) throw new Error(result.description || "Telegram API error");
+  return result;
 }
 
 export default {
@@ -86,13 +16,55 @@ export default {
     const url = new URL(request.url);
 
     if (request.method === "GET" && url.pathname === "/health") {
-      return json({ status: "ok" });
+      return new Response('{"status":"ok"}', {
+        headers: { "content-type": "application/json" },
+      });
     }
 
-    if (request.method === "POST" && url.pathname === "/telegram") {
-      return handleWebhook(request, env);
+    if (request.method !== "POST" || url.pathname !== "/telegram") {
+      return new Response("Not found", { status: 404 });
     }
 
-    return json({ error: "not_found" }, 404);
+    if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_WEBHOOK_SECRET) {
+      return new Response("Server configuration error", { status: 500 });
+    }
+
+    if (request.headers.get("X-Telegram-Bot-Api-Secret-Token") !== env.TELEGRAM_WEBHOOK_SECRET) {
+      return new Response("Unauthorized", { status: 401 });
+    }
+
+    let update;
+    try {
+      update = await request.json();
+    } catch {
+      return new Response("Invalid JSON", { status: 400 });
+    }
+
+    const message = update.message;
+    if (!message?.chat?.id || !message.message_id) {
+      return new Response("OK");
+    }
+
+    try {
+      const command = message.text?.trim().split(/\s+/, 1)[0].split("@", 1)[0];
+
+      if (command === "/start") {
+        await telegram(env, "sendMessage", {
+          chat_id: message.chat.id,
+          text: "Привет! Я эхо-бот. Отправь любое сообщение — я повторю его.",
+        });
+      } else {
+        await telegram(env, "copyMessage", {
+          chat_id: message.chat.id,
+          from_chat_id: message.chat.id,
+          message_id: message.message_id,
+        });
+      }
+
+      return new Response("OK");
+    } catch (error) {
+      console.error(error);
+      return new Response("Telegram request failed", { status: 502 });
+    }
   },
 };
