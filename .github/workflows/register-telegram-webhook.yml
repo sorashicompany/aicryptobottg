@@ -15,7 +15,7 @@ jobs:
           WORKER_URL: https://aicryptobottg-echo.sorashithegod.workers.dev
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error "${WORKER_URL%/}/health"
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 10 --retry-max-time 90 "${WORKER_URL%/}/health"
 
       - name: Register Telegram webhook
         env:
